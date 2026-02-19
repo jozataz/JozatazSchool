@@ -1,2 +1,2 @@
 # JozatazSchool
-School projects
+### School projects
