@@ -1,0 +1,74 @@
+#include <BleGamepad.h>
+#include <Wire.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BNO055.h>
+#include <utility/imumaths.h>
+
+// Create the Bluetooth Gamepad object
+BleGamepad bleGamepad("Drone Bluetooth Controller", "MEJ", 100);
+
+// Create the BNO055 object (55 is a sensor ID, 0x28 is the default I2C address)
+Adafruit_BNO055 bno = Adafruit_BNO055(55, 0x29, &Wire);
+
+// Define Joystick Pins
+const int joyXPin = 26;
+const int joyYPin = 33;
+
+void setup() {
+  Serial.begin(115200);
+  
+  // Initialize the BNO055
+  if (!bno.begin()) {
+   while (1); // Halt the program if the sensor isn't found
+  }
+  
+  // Use external crystal for better accuracy (standard for BNO055)
+  bno.setExtCrystalUse(true);
+
+  // Initialize Bluetooth
+  bleGamepad.begin();
+}
+
+void loop() {
+  if (bleGamepad.isConnected()) {
+    
+    // ==========================================
+    // 1. READ JOYSTICK (Left Stick)
+    // ==========================================
+    int rawJoyX = analogRead(joyXPin); 
+    int rawJoyY = analogRead(joyYPin);
+    
+    // analog read goes from 0 to 4095. 
+    // The Gamepad library expects values from 0 to 32767.
+    int mapJoyX = map(rawJoyX, -300, 4095, 0, 32767);
+    int mapJoyY = map(rawJoyY, -300, 4095, 0, 32767);
+
+    // ==========================================
+    // 2. READ BNO055 GYRO (Right Stick / Camera)
+    // ==========================================
+    sensors_event_t event;
+    bno.getEvent(&event);
+    
+    // Get Pitch (up/down tilt) and Roll (left/right tilt) in degrees
+    float pitch = event.orientation.y; 
+    float roll = event.orientation.z;  
+    
+    // Constrain the angles so moving past 70 degrees doesn't invert the controls
+    pitch = constrain(pitch, -70, 70);
+    roll = constrain(roll, -70, 70);
+    
+    // Map the tilt angles (-70 to 70 degrees) to the Gamepad range (0 to 32767)
+    int mapPitch = map(pitch, 70, -70, 0, 32767);
+    int mapRoll = map(roll, -70, 70, 0, 32767);
+
+    // ==========================================
+    // 3. SEND DATA TO PC/CONSOLE
+    // ==========================================
+    // setAxes format: (Left X, Left Y, Right X, Right Y, Left Trigger, Right Trigger, D-Pad 1, D-Pad 2)
+    // We are mapping the Gyro Roll to Right X, and Gyro Pitch to Right Y
+    bleGamepad.setAxes(mapJoyX, mapJoyY, mapRoll, mapPitch, 0, 0, 0, 0);
+    
+    // Small delay to prevent spamming the Bluetooth connection
+    delay(10); 
+  }
+}
